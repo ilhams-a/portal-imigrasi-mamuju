@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Akses Mandiri - Imigrasi Mamuju</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome untuk Ikon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .imigrasi-green { background-color: #005b3f; }
+        .text-imigrasi-green { color: #005b3f; }
+        .imigrasi-gold { color: #d4af37; }
+        .bg-imigrasi-gold { background-color: #d4af37; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- MOCK DATABASE (Data Demo) ---
+        const initialDB = {
+            admins: [{ id: 1, email: 'admin@imigrasi.go.id', password: 'admin', name: 'Admin Utama', role: 'Super Admin' }],
+            services: [
+                { id: 's1', name: 'Paspor Baru', category: 'WNI', type: 'PASPOR', description: 'Layanan pembuatan paspor baru untuk WNI.', requirements: ['KTP asli dan fotokopi', 'KK asli dan fotokopi', 'Akta Kelahiran/Ijazah/Buku Nikah asli dan fotokopi'], status: 'Aktif' },
+                { id: 's2', name: 'Ganti Paspor', category: 'WNI', type: 'PASPOR', description: 'Penggantian paspor karena habis masa berlaku/halaman penuh.', requirements: ['E-KTP asli dan fotokopi', 'Paspor Lama asli dan fotokopi'], status: 'Aktif' },
+                { id: 's3', name: 'Ganti Paspor Karena Hilang', category: 'WNI', type: 'PASPOR', description: 'Penggantian paspor akibat hilang.', requirements: ['E-KTP', 'KK', 'Surat Keterangan Kehilangan dari Kepolisian', 'Surat Pernyataan Kehilangan Paspor'], status: 'Aktif' },
+                { id: 's4', name: 'Visa Kunjungan', category: 'WNA', type: 'VISA', description: 'Visa untuk kunjungan singkat (wisata, bisnis, dll).', requirements: ['Paspor kebangsaan yang sah dan masih berlaku minimal 6 (enam) bulan', 'Tiket kembali atau tiket terusan', 'Bukti jaminan hidup'], status: 'Aktif' },
+                { id: 's5', name: 'Izin Tinggal Terbatas (ITAS)', category: 'WNA', type: 'IZIN TINGGAL', description: 'Pemberian Izin Tinggal Terbatas untuk WNA.', requirements: ['Paspor Kebangsaan', 'Surat Permohonan dan Jaminan', 'Surat Keterangan Domisili'], status: 'Aktif' }
+            ],
+            documents: [
+                { id: 'd1', name: 'Surat Pernyataan WNI', serviceId: 's1', category: 'WNI', version: '1.0', updateDate: '2026-08-24', downloads: 120, status: 'Aktif', fileData: null },
+                { id: 'd2', name: 'Surat Pernyataan Kehilangan Paspor (DEMO - GANTI DENGAN DOKUMEN RESMI)', serviceId: 's3', category: 'WNI', version: '1.1', updateDate: '2026-08-22', downloads: 45, status: 'Aktif', fileData: null },
+                { id: 'd3', name: 'Surat Pernyataan WNA', serviceId: 's4', category: 'WNA', version: '1.0', updateDate: '2026-08-23', downloads: 89, status: 'Aktif', fileData: null },
+                { id: 'd4', name: 'Surat Jaminan ITAS', serviceId: 's5', category: 'WNA', version: '2.0', updateDate: '2026-08-20', downloads: 210, status: 'Aktif', fileData: null }
+            ],
+            faqs: [
+                { id: 1, question: 'Apakah masyarakat perlu login untuk download formulir?', answer: 'Tidak. Masyarakat dapat langsung melihat persyaratan dan mengunduh formulir tanpa perlu membuat akun atau login.' },
+                { id: 2, question: 'Apa saja persyaratan ganti paspor karena habis masa berlaku?', answer: 'Persyaratan utamanya adalah E-KTP dan Paspor Lama Anda.' },
+                { id: 3, question: 'Bagaimana jika dokumen yang saya cari tidak tersedia?', answer: 'Anda dapat menggunakan fitur "Sarankan Dokumen" di halaman bawah website untuk memberi masukan kepada petugas kami.' }
+            ],
+            announcements: [
+                { id: 1, title: 'Layanan Paspor Simpatik Akhir Pekan', content: 'Dalam rangka Hari Bhakti Imigrasi, kami membuka layanan paspor simpatik pada hari Sabtu.', date: '2026-09-25', status: 'Published' }
+            ],
+            feedback: [],
+            suggestions: [],
+            stats: { totalVisitors: 5432, todayVisitors: 120, thisWeekVisitors: 840, thisMonthVisitors: 3200 }
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const App = () => {
+            // State Routing & Auth
+            const [page, setPage] = useState('home');
+            const [routeParams, setRouteParams] = useState(null);
+            const [adminUser, setAdminUser] = useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+
+            // State Database (Local Storage Simulation)
+            const [db, setDb] = useState(() => {
+                const localData = localStorage.getItem('imigrasi_db');
+                return localData ? JSON.parse(localData) : initialDB;
+            });
+
+            useEffect(() => {
+                localStorage.setItem('imigrasi_db', JSON.stringify(db));
+            }, [db]);
+
+            // Track Visitors on load
+            useEffect(() => {
+                if(page === 'home' && !adminUser) {
+                    setDb(prev => ({
+                        ...prev, 
+                        stats: { ...prev.stats, totalVisitors: prev.stats.totalVisitors + 1, todayVisitors: prev.stats.todayVisitors + 1 }
+                    }));
+                }
+            }, []);
+
+            // Helper Navigation
+            const navigate = (pageName, params = null) => {
+                setPage(pageName);
+                setRouteParams(params);
+                window.scrollTo(0, 0);
+            };
+
+            const downloadDoc = (docId) => {
+                setDb(prev => {
+                    const newDocs = prev.documents.map(d => d.id === docId ? { ...d, downloads: d.downloads + 1 } : d);
+                    return { ...prev, documents: newDocs };
+                });
+                const doc = db.documents.find(d => d.id === docId);
+                // Simulate download
+                if (doc.fileData) {
+                    const link = document.createElement('a');
+                    link.href = doc.fileData;
+                    link.download = `${doc.name}.pdf`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    alert(`Mengunduh (Simulasi): ${doc.name}.pdf`);
+                }
+            };
+
+            // --- COMPONENTS: PUBLIC ---
+            const Navbar = () => (
+                <nav className="imigrasi-green text-white shadow-md sticky top-0 z-50">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between h-16 items-center">
+                            <div className="flex items-center cursor-pointer" onClick={() => navigate('home')}>
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Pengayoman_Kemenkumham.svg/800px-Pengayoman_Kemenkumham.svg.png" alt="Logo" className="h-10 w-10 mr-3 filter brightness-0 invert" />
+                                <div>
+                                    <h1 className="font-bold text-lg leading-tight">KANTOR IMIGRASI</h1>
+                                    <p className="text-xs text-gray-200">Kelas II Non TPI Mamuju</p>
+                                </div>
+                            </div>
+                            <div className="hidden md:flex space-x-6 items-center">
+                                <button onClick={() => navigate('home')} className="hover:text-yellow-300 font-medium">Beranda</button>
+                                <button onClick={() => navigate('layanan', { category: 'WNI' })} className="hover:text-yellow-300 font-medium">Layanan WNI</button>
+                                <button onClick={() => navigate('layanan', { category: 'WNA' })} className="hover:text-yellow-300 font-medium">Layanan WNA</button>
+                                <button onClick={() => navigate('faq')} className="hover:text-yellow-300 font-medium">FAQ</button>
+                                {adminUser ? 
+                                    <button onClick={() => navigate('admin_dashboard')} className="bg-yellow-500 text-green-900 px-4 py-1.5 rounded font-bold shadow hover:bg-yellow-400">Dashboard</button>
+                                :
+                                    <button onClick={() => navigate('admin_login')} className="text-sm border border-white px-3 py-1 rounded hover:bg-white hover:text-green-800 transition">Petugas</button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+            );
+
+            const Footer = () => (
+                <footer className="bg-gray-800 text-gray-300 py-10 mt-12">
+                    <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div>
+                            <h3 className="text-white font-bold text-lg mb-4">Kantor Imigrasi Mamuju</h3>
+                            <p className="text-sm leading-relaxed">Portal Akses Mandiri Dokumen dan Informasi Layanan Keimigrasian. Melayani masyarakat dengan PASTI.</p>
+                        </div>
+                        <div>
+                            <h3 className="text-white font-bold text-lg mb-4">Tautan Cepat</h3>
+                            <ul className="text-sm space-y-2">
+                                <li><button onClick={() => navigate('layanan', {category: 'WNI'})} className="hover:text-white">Layanan WNI</button></li>
+                                <li><button onClick={() => navigate('layanan', {category: 'WNA'})} className="hover:text-white">Layanan WNA</button></li>
+                                <li><button onClick={() => navigate('faq')} className="hover:text-white">Pertanyaan Sering Ditanya (FAQ)</button></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 className="text-white font-bold text-lg mb-4">Disclaimer</h3>
+                            <p className="text-xs leading-relaxed text-gray-400 text-justify">
+                                Informasi dan template dokumen pada website ini disediakan sebagai media akses mandiri bagi pemohon. Persyaratan dan ketentuan layanan dapat berubah sesuai dengan peraturan dan kebijakan yang berlaku. Pemohon wajib memastikan kembali persyaratan terbaru sebelum mengajukan permohonan. Website ini merupakan media informasi dan tidak menggantikan proses pelayanan resmi.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="text-center text-xs mt-8 border-t border-gray-700 pt-6">
+                        &copy; 2026 Kantor Imigrasi Kelas II Non TPI Mamuju. All rights reserved.
+                    </div>
+                </footer>
+            );
+
+            const Home = () => {
+                const handleSearch = (e) => {
+                    e.preventDefault();
+                    navigate('search_results', { q: searchQuery });
+                };
+
+                return (
+                    <div>
+                        {/* Hero Section */}
+                        <div className="relative bg-gradient-to-r from-[#004d35] to-[#007b55] text-white overflow-hidden">
+                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative z-10 text-center md:text-left">
+                                <h2 className="text-4xl font-extrabold tracking-tight mb-4 text-yellow-400">Portal Akses Mandiri</h2>
+                                <h3 className="text-2xl font-bold mb-4">Dokumen dan Informasi Layanan Keimigrasian</h3>
+                                <p className="mt-4 text-lg max-w-2xl text-gray-100 mb-8 md:mx-0 mx-auto">Temukan persyaratan layanan dan unduh surat atau dokumen pendukung keimigrasian dengan cepat dan mudah, tanpa perlu antre.</p>
+                                
+                                <form onSubmit={handleSearch} className="max-w-2xl flex shadow-lg rounded-lg overflow-hidden">
+                                    <input type="text" placeholder="Cari layanan atau dokumen yang Anda butuhkan (misal: Ganti Paspor)..." className="w-full px-5 py-4 text-gray-900 focus:outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} required />
+                                    <button type="submit" className="bg-yellow-500 hover:bg-yellow-400 text-green-900 font-bold px-6 py-4 flex items-center">
+                                        <i className="fa-solid fa-search mr-2"></i> Cari
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* Pengumuman */}
+                        {db.announcements.filter(a => a.status === 'Published').length > 0 && (
+                            <div className="max-w-7xl mx-auto px-4 py-6">
+                                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded shadow-sm flex items-start">
+                                    <i className="fa-solid fa-bullhorn text-blue-500 mt-1 mr-3 text-xl"></i>
+                                    <div>
+                                        <h4 className="font-bold text-blue-800">{db.announcements[0].title}</h4>
+                                        <p className="text-sm text-blue-700 mt-1">{db.announcements[0].content}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Kategori Layanan */}
+                        <div className="max-w-7xl mx-auto px-4 py-12">
+                            <h2 className="text-2xl font-bold text-center text-gray-800 mb-10">Pilih Kategori Layanan</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div onClick={() => navigate('layanan', { category: 'WNI' })} className="bg-white rounded-xl shadow-md p-8 text-center cursor-pointer hover:shadow-xl hover:border-green-500 border-2 border-transparent transition group">
+                                    <div className="w-20 h-20 mx-auto bg-green-100 text-green-700 rounded-full flex items-center justify-center text-4xl mb-4 group-hover:scale-110 transition">
+                                        <i className="fa-solid fa-id-card"></i>
+                                    </div>
+                                    <h3 className="text-2xl font-bold mb-2">Layanan WNI</h3>
+                                    <p className="text-gray-600 mb-4">Informasi dan dokumen persyaratan untuk Paspor Baru, Penggantian Paspor, dan layanan Warga Negara Indonesia lainnya.</p>
+                                    <span className="text-green-700 font-bold">Lihat Layanan &rarr;</span>
+                                </div>
+                                <div onClick={() => navigate('layanan', { category: 'WNA' })} className="bg-white rounded-xl shadow-md p-8 text-center cursor-pointer hover:shadow-xl hover:border-blue-500 border-2 border-transparent transition group">
+                                    <div className="w-20 h-20 mx-auto bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-4xl mb-4 group-hover:scale-110 transition">
+                                        <i className="fa-solid fa-globe"></i>
+                                    </div>
+                                    <h3 className="text-2xl font-bold mb-2">Layanan WNA</h3>
+                                    <p className="text-gray-600 mb-4">Informasi Visa, Izin Tinggal Terbatas (ITAS), Izin Tinggal Tetap (ITAP), dan layanan Warga Negara Asing lainnya.</p>
+                                    <span className="text-blue-700 font-bold">Lihat Layanan &rarr;</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Dokumen Terbaru */}
+                        <div className="bg-gray-100 py-12">
+                            <div className="max-w-7xl mx-auto px-4">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6">Dokumen Terbaru Diperbarui</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {db.documents.slice(0, 3).map(doc => (
+                                        <div key={doc.id} className="bg-white p-5 rounded-lg shadow border border-gray-200">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className={`text-xs font-bold px-2 py-1 rounded ${doc.category === 'WNI' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{doc.category}</span>
+                                                <span className="text-xs text-gray-500">Versi {doc.version}</span>
+                                            </div>
+                                            <h4 className="font-bold text-lg mb-1">{doc.name}</h4>
+                                            <p className="text-xs text-gray-500 mb-4">Diperbarui: {doc.updateDate}</p>
+                                            <button onClick={() => downloadDoc(doc.id)} className="w-full bg-gray-50 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded text-sm border flex items-center justify-center">
+                                                <i className="fa-solid fa-download mr-2"></i> Unduh PDF
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Feedback Banner */}
+                        <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+                            <h2 className="text-xl font-bold text-gray-800 mb-3">Tidak Menemukan yang Anda Cari?</h2>
+                            <p className="text-gray-600 mb-6">Bantu kami meningkatkan layanan dengan memberikan masukan atau menyarankan dokumen yang belum tersedia di website ini.</p>
+                            <div className="flex justify-center space-x-4">
+                                <button onClick={() => navigate('feedback')} className="px-6 py-2 bg-green-700 text-white font-medium rounded hover:bg-green-800 shadow">Kirim Feedback</button>
+                                <button onClick={() => navigate('suggest')} className="px-6 py-2 bg-white text-green-700 border border-green-700 font-medium rounded hover:bg-gray-50 shadow">Sarankan Dokumen</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const SearchResults = () => {
+                const q = (routeParams?.q || '').toLowerCase();
+                const matchedServices = db.services.filter(s => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+                const matchedDocs = db.documents.filter(d => d.name.toLowerCase().includes(q));
+
+                return (
+                    <div className="max-w-7xl mx-auto px-4 py-10 min-h-screen">
+                        <h2 className="text-2xl font-bold mb-6">Hasil Pencarian: "{q}"</h2>
+                        
+                        <h3 className="text-xl font-bold text-gray-700 border-b pb-2 mb-4">Layanan Ditemukan ({matchedServices.length})</h3>
+                        {matchedServices.length === 0 ? <p className="text-gray-500 mb-8">Tidak ada layanan terkait.</p> : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                                {matchedServices.map(s => (
+                                    <div key={s.id} onClick={() => navigate('service_detail', { id: s.id })} className="bg-white p-4 rounded shadow hover:shadow-md cursor-pointer border-l-4 border-green-600">
+                                        <h4 className="font-bold text-lg">{s.name}</h4>
+                                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{s.description}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <h3 className="text-xl font-bold text-gray-700 border-b pb-2 mb-4">Dokumen Ditemukan ({matchedDocs.length})</h3>
+                        {matchedDocs.length === 0 ? <p className="text-gray-500">Tidak ada dokumen terkait.</p> : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {matchedDocs.map(d => (
+                                    <div key={d.id} className="bg-white p-4 rounded shadow flex flex-col justify-between">
+                                        <div>
+                                            <h4 className="font-bold mb-1">{d.name}</h4>
+                                            <p className="text-xs text-gray-500 mb-3">Terkait layanan: {db.services.find(s=>s.id === d.serviceId)?.name || '-'}</p>
+                                        </div>
+                                        <button onClick={() => downloadDoc(d.id)} className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm py-2 rounded border w-full flex items-center justify-center">
+                                            <i className="fa-solid fa-download mr-2"></i> Unduh PDF
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const Layanan = () => {
+                const cat = routeParams?.category || 'WNI';
+                const services = db.services.filter(s => s.category === cat && s.status === 'Aktif');
+
+                return (
+                    <div className="max-w-7xl mx-auto px-4 py-10 min-h-[60vh]">
+                        <h2 className="text-3xl font-bold mb-2">Layanan {cat}</h2>
+                        <p className="text-gray-600 mb-8">Pilih jenis layanan untuk melihat persyaratan dan dokumen yang dibutuhkan.</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {services.map(s => (
+                                <div key={s.id} onClick={() => navigate('service_detail', { id: s.id })} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-lg cursor-pointer transition flex flex-col">
+                                    <div className={`w-12 h-12 rounded flex items-center justify-center text-xl mb-4 ${cat === 'WNI' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                        <i className={`fa-solid ${s.type === 'PASPOR' ? 'fa-book' : s.type === 'VISA' ? 'fa-passport' : 'fa-file-signature'}`}></i>
+                                    </div>
+                                    <h3 className="font-bold text-lg mb-2">{s.name}</h3>
+                                    <p className="text-gray-600 text-sm flex-grow mb-4">{s.description}</p>
+                                    <div className="text-sm font-bold text-blue-600 flex items-center mt-auto">
+                                        Lihat Persyaratan <i className="fa-solid fa-arrow-right ml-2"></i>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            const ServiceDetail = () => {
+                const service = db.services.find(s => s.id === routeParams?.id);
+                const docs = db.documents.filter(d => d.serviceId === service?.id && d.status === 'Aktif');
+                const qrRef = useRef(null);
+
+                useEffect(() => {
+                    if (service && qrRef.current) {
+                        qrRef.current.innerHTML = '';
+                        new QRCode(qrRef.current, {
+                            text: window.location.href, // In real app: `${window.location.origin}?page=service_detail&id=${service.id}`
+                            width: 128,
+                            height: 128,
+                        });
+                    }
+                }, [service]);
+
+                if (!service) return <div className="p-10 text-center">Layanan tidak ditemukan.</div>;
+
+                return (
+                    <div className="max-w-5xl mx-auto px-4 py-10">
+                        <button onClick={() => navigate('layanan', { category: service.category })} className="text-gray-500 hover:text-gray-800 mb-6 flex items-center">
+                            <i className="fa-solid fa-arrow-left mr-2"></i> Kembali ke Layanan {service.category}
+                        </button>
+                        
+                        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+                            <div className="bg-gradient-to-r from-gray-800 to-gray-700 p-6 text-white flex justify-between items-center">
+                                <div>
+                                    <span className="bg-yellow-500 text-gray-900 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">{service.type}</span>
+                                    <h2 className="text-3xl font-bold mt-2">{service.name}</h2>
+                                </div>
+                                <div className="hidden md:block bg-white p-2 rounded shadow-sm">
+                                    <div ref={qrRef}></div>
+                                    <p className="text-black text-[10px] text-center mt-1 font-bold">Scan Halaman Ini</p>
+                                </div>
+                            </div>
+                            
+                            <div className="p-6 md:p-8">
+                                <h3 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4">Deskripsi Layanan</h3>
+                                <p className="text-gray-600 mb-8 leading-relaxed">{service.description}</p>
+                                
+                                <h3 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-center">
+                                    <i className="fa-solid fa-list-check text-green-600 mr-2"></i> Persyaratan
+                                </h3>
+                                <ul className="list-disc list-inside text-gray-700 mb-8 space-y-2">
+                                    {service.requirements.map((req, idx) => (
+                                        <li key={idx} className="pl-2">{req}</li>
+                                    ))}
+                                </ul>
+
+                                <h3 className="text-xl font-bold text-gray-800 border-b pb-2 mb-4 flex items-center">
+                                    <i className="fa-solid fa-file-pdf text-red-600 mr-2"></i> Unduh Dokumen Pendukung
+                                </h3>
+                                {docs.length === 0 ? (
+                                    <p className="text-gray-500 italic">Tidak ada formulir/dokumen yang perlu diunduh untuk layanan ini.</p>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {docs.map(d => (
+                                            <div key={d.id} className="border rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-50 hover:bg-gray-100 transition">
+                                                <div className="mb-3 sm:mb-0">
+                                                    <h4 className="font-bold text-gray-800">{d.name}</h4>
+                                                    <p className="text-xs text-gray-500">Versi {d.version} &bull; Diperbarui {d.updateDate}</p>
+                                                </div>
+                                                <div className="flex space-x-2 w-full sm:w-auto">
+                                                    <button onClick={() => downloadDoc(d.id)} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-100 flex-1 sm:flex-none text-center">
+                                                        <i className="fa-solid fa-eye"></i> Lihat
+                                                    </button>
+                                                    <button onClick={() => downloadDoc(d.id)} className="bg-red-600 text-white px-3 py-1.5 rounded text-sm hover:bg-red-700 flex-1 sm:flex-none text-center shadow-sm">
+                                                        <i className="fa-solid fa-download"></i> Unduh
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                <div className="mt-8 md:hidden bg-gray-100 p-4 rounded text-center">
+                                    <p className="text-sm font-bold mb-2">QR Code Layanan</p>
+                                    <div className="flex justify-center"><div ref={qrRef}></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const FAQFeedbackSuggest = () => {
+                const [fbRating, setFbRating] = useState(5);
+                const [fbFound, setFbFound] = useState('Ya');
+                const [fbService, setFbService] = useState('');
+                const [fbSaran, setFbSaran] = useState('');
+
+                const submitFeedback = (e) => {
+                    e.preventDefault();
+                    setDb(prev => ({
+                        ...prev,
+                        feedback: [...prev.feedback, { id: Date.now(), rating: fbRating, found: fbFound, service: fbService, message: fbSaran, date: new Date().toISOString().split('T')[0] }]
+                    }));
+                    alert("Terima kasih! Feedback Anda telah terkirim.");
+                    navigate('home');
+                };
+
+                return (
+                    <div className="max-w-4xl mx-auto px-4 py-10">
+                        {page === 'faq' && (
+                            <div>
+                                <h2 className="text-3xl font-bold mb-8 text-center">Pertanyaan yang Sering Diajukan (FAQ)</h2>
+                                <div className="space-y-4">
+                                    {db.faqs.map(f => (
+                                        <div key={f.id} className="bg-white p-5 rounded shadow-sm border">
+                                            <h3 className="font-bold text-lg text-gray-800 mb-2 flex items-start">
+                                                <i className="fa-solid fa-circle-question text-blue-500 mt-1 mr-3"></i> {f.question}
+                                            </h3>
+                                            <p className="text-gray-600 ml-8">{f.answer}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {page === 'feedback' && (
+                            <div className="bg-white p-8 rounded-xl shadow-md border">
+                                <h2 className="text-2xl font-bold mb-6 text-center">Berikan Feedback Anda</h2>
+                                <form onSubmit={submitFeedback} className="space-y-5">
+                                    <div>
+                                        <label className="block font-bold mb-2">Seberapa mudah website ini digunakan?</label>
+                                        <select value={fbRating} onChange={e=>setFbRating(e.target.value)} className="w-full border p-2 rounded bg-gray-50">
+                                            <option value="5">5 - Sangat Mudah</option>
+                                            <option value="4">4 - Mudah</option>
+                                            <option value="3">3 - Cukup</option>
+                                            <option value="2">2 - Sulit</option>
+                                            <option value="1">1 - Sangat Sulit</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold mb-2">Apakah Anda menemukan dokumen yang Anda butuhkan?</label>
+                                        <div className="flex space-x-4">
+                                            <label className="flex items-center"><input type="radio" name="found" value="Ya" checked={fbFound==='Ya'} onChange={e=>setFbFound(e.target.value)} className="mr-2"/> Ya</label>
+                                            <label className="flex items-center"><input type="radio" name="found" value="Tidak" checked={fbFound==='Tidak'} onChange={e=>setFbFound(e.target.value)} className="mr-2"/> Tidak</label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold mb-2">Layanan apa yang Anda cari?</label>
+                                        <select value={fbService} onChange={e=>setFbService(e.target.value)} className="w-full border p-2 rounded bg-gray-50">
+                                            <option value="">-- Pilih Layanan --</option>
+                                            {db.services.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold mb-2">Saran atau Masukan</label>
+                                        <textarea value={fbSaran} onChange={e=>setFbSaran(e.target.value)} className="w-full border p-2 rounded bg-gray-50" rows="4"></textarea>
+                                    </div>
+                                    <button type="submit" className="w-full bg-green-700 text-white font-bold py-3 rounded shadow hover:bg-green-800">Kirim Feedback</button>
+                                </form>
+                            </div>
+                        )}
+                        {page === 'suggest' && (
+                            <div className="bg-white p-8 rounded-xl shadow-md border">
+                                <h2 className="text-2xl font-bold mb-6 text-center">Sarankan Dokumen Baru</h2>
+                                <form onSubmit={(e) => { e.preventDefault(); alert('Saran terkirim!'); navigate('home'); }} className="space-y-5">
+                                    <div>
+                                        <label className="block font-bold mb-2">Nama Dokumen yang Dicari</label>
+                                        <input type="text" className="w-full border p-2 rounded bg-gray-50" required placeholder="Contoh: Surat Kuasa Pengambilan Paspor" />
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold mb-2">Terkait Layanan</label>
+                                        <select className="w-full border p-2 rounded bg-gray-50" required>
+                                            <option value="">-- Pilih --</option>
+                                            <option value="WNI">Layanan WNI</option>
+                                            <option value="WNA">Layanan WNA</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block font-bold mb-2">Keterangan / Alasan</label>
+                                        <textarea className="w-full border p-2 rounded bg-gray-50" rows="4" placeholder="Jelaskan mengapa dokumen ini diperlukan..."></textarea>
+                                    </div>
+                                    <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 rounded shadow hover:bg-blue-700">Kirim Saran</button>
+                                </form>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // --- COMPONENTS: ADMIN LOGIN ---
+            const AdminLogin = () => {
+                const [email, setEmail] = useState('');
+                const [pwd, setPwd] = useState('');
+                const [err, setErr] = useState('');
+
+                const handleLogin = (e) => {
+                    e.preventDefault();
+                    const user = db.admins.find(a => a.email === email && a.password === pwd);
+                    if (user) {
+                        setAdminUser(user);
+                        navigate('admin_dashboard');
+                    } else {
+                        setErr('Email atau password salah.');
+                    }
+                };
+
+                const handleForgot = () => {
+                    alert("Jika Anda lupa password administrator, silakan gunakan email administrator yang terdaftar atau hubungi pengelola sistem.");
+                };
+
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+                        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+                            <div className="text-center mb-8">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Pengayoman_Kemenkumham.svg/800px-Pengayoman_Kemenkumham.svg.png" className="w-16 mx-auto mb-4" alt="Logo" />
+                                <h2 className="text-2xl font-bold text-gray-800">Login Administrator</h2>
+                                <p className="text-sm text-gray-500 mt-1">Portal Akses Mandiri Imigrasi</p>
+                            </div>
+                            {err && <div className="bg-red-100 text-red-700 p-3 rounded text-sm mb-4">{err}</div>}
+                            <form onSubmit={handleLogin}>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Email Petugas</label>
+                                    <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full px-3 py-2 border rounded focus:outline-none focus:border-green-500" required />
+                                </div>
+                                <div className="mb-6">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
+                                    <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} className="w-full px-3 py-2 border rounded focus:outline-none focus:border-green-500" required />
+                                </div>
+                                <button type="submit" className="w-full bg-green-700 text-white font-bold py-2 px-4 rounded hover:bg-green-800 transition">Login Sistem</button>
+                            </form>
+                            <div className="mt-6 text-center text-sm">
+                                <button onClick={handleForgot} className="text-blue-600 hover:underline">Lupa Password?</button>
+                                <p className="mt-4 text-xs text-gray-400">Pendaftaran akun administrator tidak dilakukan secara publik. Hubungi pengelola sistem untuk akses.</p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // --- COMPONENTS: ADMIN AREA ---
+            const AdminSidebar = () => (
+                <div className="w-64 bg-gray-900 text-white flex flex-col min-h-screen">
+                    <div className="p-4 bg-gray-950 flex items-center border-b border-gray-800">
+                        <i className="fa-solid fa-shield-halved text-2xl text-yellow-500 mr-3"></i>
+                        <div>
+                            <h3 className="font-bold text-sm">Admin Panel</h3>
+                            <p className="text-xs text-gray-400">{adminUser.name}</p>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto py-4">
+                        <ul className="space-y-1 text-sm font-medium">
+                            <li><button onClick={() => navigate('admin_dashboard')} className={`w-full text-left px-6 py-2.5 hover:bg-gray-800 flex items-center ${page === 'admin_dashboard' ? 'bg-gray-800 text-green-400' : 'text-gray-300'}`}><i className="fa-solid fa-chart-line w-6"></i> Statistik</button></li>
+                            <li className="px-6 py-2 text-xs text-gray-500 uppercase tracking-wider mt-4 mb-1">Manajemen Layanan</li>
+                            <li><button onClick={() => navigate('admin_services')} className={`w-full text-left px-6 py-2.5 hover:bg-gray-800 flex items-center ${page === 'admin_services' ? 'bg-gray-800 text-green-400' : 'text-gray-300'}`}><i className="fa-solid fa-list-check w-6"></i> Data Layanan</button></li>
+                            <li><button onClick={() => navigate('admin_docs')} className={`w-full text-left px-6 py-2.5 hover:bg-gray-800 flex items-center ${page === 'admin_docs' ? 'bg-gray-800 text-green-400' : 'text-gray-300'}`}><i className="fa-solid fa-file-pdf w-6"></i> Dokumen / Surat</button></li>
+                            <li className="px-6 py-2 text-xs text-gray-500 uppercase tracking-wider mt-4 mb-1">Interaksi</li>
+                            <li><button onClick={() => navigate('admin_announcements')} className={`w-full text-left px-6 py-2.5 hover:bg-gray-800 flex items-center ${page === 'admin_announcements' ? 'bg-gray-800 text-green-400' : 'text-gray-300'}`}><i className="fa-solid fa-bullhorn w-6"></i> Pengumuman</button></li>
+                            <li><button onClick={() => navigate('admin_feedback')} className={`w-full text-left px-6 py-2.5 hover:bg-gray-800 flex items-center ${page === 'admin_feedback' ? 'bg-gray-800 text-green-400' : 'text-gray-300'}`}><i className="fa-solid fa-comments w-6"></i> Feedback Publik</button></li>
+                        </ul>
+                    </div>
+                    <div className="p-4 border-t border-gray-800">
+                        <button onClick={() => { setAdminUser(null); navigate('home'); }} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded text-sm flex items-center justify-center">
+                            <i className="fa-solid fa-arrow-right-from-bracket mr-2"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            );
+
+            const AdminDashboard = () => (
+                <div>
+                    <h2 className="text-2xl font-bold mb-6">Ringkasan Statistik</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                        <div className="bg-white p-6 rounded shadow border-l-4 border-blue-500">
+                            <p className="text-sm text-gray-500 font-bold uppercase">Total Pengunjung</p>
+                            <h3 className="text-3xl font-bold mt-2">{db.stats.totalVisitors}</h3>
+                        </div>
+                        <div className="bg-white p-6 rounded shadow border-l-4 border-green-500">
+                            <p className="text-sm text-gray-500 font-bold uppercase">Pengunjung Hari Ini</p>
+                            <h3 className="text-3xl font-bold mt-2">{db.stats.todayVisitors}</h3>
+                        </div>
+                        <div className="bg-white p-6 rounded shadow border-l-4 border-yellow-500">
+                            <p className="text-sm text-gray-500 font-bold uppercase">Total Dokumen</p>
+                            <h3 className="text-3xl font-bold mt-2">{db.documents.length}</h3>
+                        </div>
+                        <div className="bg-white p-6 rounded shadow border-l-4 border-red-500">
+                            <p className="text-sm text-gray-500 font-bold uppercase">Total Unduhan PDF</p>
+                            <h3 className="text-3xl font-bold mt-2">{db.documents.reduce((acc, curr) => acc + curr.downloads, 0)}</h3>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white rounded shadow p-6">
+                            <h3 className="font-bold text-lg mb-4 border-b pb-2">Dokumen Paling Banyak Diunduh</h3>
+                            <ul className="space-y-3">
+                                {[...db.documents].sort((a,b)=>b.downloads - a.downloads).slice(0,5).map(d => (
+                                    <li key={d.id} className="flex justify-between items-center text-sm">
+                                        <span>{d.name}</span>
+                                        <span className="font-bold bg-gray-100 px-2 py-1 rounded">{d.downloads} x</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <div className="bg-white rounded shadow p-6">
+                            <h3 className="font-bold text-lg mb-4 border-b pb-2">Layanan Terdaftar</h3>
+                            <ul className="space-y-3">
+                                <li className="flex justify-between items-center text-sm">
+                                    <span>Layanan WNI (Paspor, dll)</span>
+                                    <span className="font-bold bg-green-100 text-green-800 px-2 py-1 rounded">{db.services.filter(s=>s.category==='WNI').length}</span>
+                                </li>
+                                <li className="flex justify-between items-center text-sm">
+                                    <span>Layanan WNA (Visa, ITAS, dll)</span>
+                                    <span className="font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">{db.services.filter(s=>s.category==='WNA').length}</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const AdminServices = () => {
+                const [isEditing, setIsEditing] = useState(false);
+                const [formData, setFormData] = useState({});
+
+                const handleEdit = (service) => {
+                    setFormData({...service, requirements: service.requirements.join('\n')});
+                    setIsEditing(true);
+                };
+
+                const handleSave = (e) => {
+                    e.preventDefault();
+                    const newReqs = formData.requirements.split('\n').filter(r => r.trim() !== '');
+                    const updatedService = { ...formData, requirements: newReqs };
+                    
+                    if (formData.id) {
+                        setDb(prev => ({ ...prev, services: prev.services.map(s => s.id === formData.id ? updatedService : s) }));
+                    } else {
+                        updatedService.id = 's' + Date.now();
+                        setDb(prev => ({ ...prev, services: [...prev.services, updatedService] }));
+                    }
+                    setIsEditing(false);
+                };
+
+                if (isEditing) return (
+                    <div className="bg-white p-6 rounded shadow max-w-2xl">
+                        <h2 className="text-xl font-bold mb-4">{formData.id ? 'Edit Layanan' : 'Tambah Layanan Baru'}</h2>
+                        <form onSubmit={handleSave} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold mb-1">Nama Layanan</label>
+                                <input type="text" value={formData.name || ''} onChange={e=>setFormData({...formData, name: e.target.value})} className="w-full border p-2 rounded" required />
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="block text-sm font-bold mb-1">Kategori</label>
+                                    <select value={formData.category || 'WNI'} onChange={e=>setFormData({...formData, category: e.target.value})} className="w-full border p-2 rounded">
+                                        <option value="WNI">WNI</option><option value="WNA">WNA</option>
+                                    </select>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-sm font-bold mb-1">Jenis Layanan</label>
+                                    <select value={formData.type || 'PASPOR'} onChange={e=>setFormData({...formData, type: e.target.value})} className="w-full border p-2 rounded">
+                                        <option value="PASPOR">PASPOR</option><option value="VISA">VISA</option><option value="IZIN TINGGAL">IZIN TINGGAL</option><option value="LAINNYA">LAINNYA</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold mb-1">Deskripsi</label>
+                                <textarea value={formData.description || ''} onChange={e=>setFormData({...formData, description: e.target.value})} className="w-full border p-2 rounded" rows="3"></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold mb-1">Persyaratan (Satu per baris)</label>
+                                <textarea value={formData.requirements || ''} onChange={e=>setFormData({...formData, requirements: e.target.value})} className="w-full border p-2 rounded" rows="5"></textarea>
+                            </div>
+                            <div className="flex space-x-3 pt-4">
+                                <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded">Simpan Data</button>
+                                <button type="button" onClick={() => setIsEditing(false)} className="bg-gray-300 text-gray-800 px-4 py-2 rounded">Batal</button>
+                            </div>
+                        </form>
+                    </div>
+                );
+
+                return (
+                    <div>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">Manajemen Layanan</h2>
+                            <button onClick={() => {setFormData({}); setIsEditing(true);}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold text-sm shadow">
+                                <i className="fa-solid fa-plus mr-1"></i> Tambah Layanan
+                            </button>
+                        </div>
+                        <div className="bg-white rounded shadow overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-100 text-gray-700 text-sm">
+                                        <th className="p-3 border-b">Nama Layanan</th>
+                                        <th className="p-3 border-b">Kategori</th>
+                                        <th className="p-3 border-b">Jenis</th>
+                                        <th className="p-3 border-b">Persyaratan</th>
+                                        <th className="p-3 border-b text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {db.services.map(s => (
+                                        <tr key={s.id} className="hover:bg-gray-50 border-b text-sm">
+                                            <td className="p-3 font-medium">{s.name}</td>
+                                            <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${s.category==='WNI'?'bg-green-100 text-green-700':'bg-blue-100 text-blue-700'}`}>{s.category}</span></td>
+                                            <td className="p-3">{s.type}</td>
+                                            <td className="p-3">{s.requirements.length} item</td>
+                                            <td className="p-3 text-center">
+                                                <button onClick={()=>handleEdit(s)} className="text-blue-600 hover:text-blue-800 mr-3"><i className="fa-solid fa-pen-to-square"></i> Edit</button>
+                                                <button onClick={()=>{ if(confirm('Hapus layanan ini?')) setDb(prev=>({...prev, services: prev.services.filter(x=>x.id!==s.id)})) }} className="text-red-600 hover:text-red-800"><i className="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
+
+            const AdminDocuments = () => {
+                const [uploadModal, setUploadModal] = useState(null); // null, or document object
+                const [newDocData, setNewDocData] = useState({});
+                const [fileInput, setFileInput] = useState(null);
+
+                const handleSaveDoc = (e) => {
+                    e.preventDefault();
+                    if(uploadModal.isNew) {
+                        const newDoc = {
+                            id: 'd' + Date.now(),
+                            name: newDocData.name,
+                            serviceId: newDocData.serviceId,
+                            category: db.services.find(s=>s.id === newDocData.serviceId)?.category || 'WNI',
+                            version: '1.0',
+                            updateDate: new Date().toISOString().split('T')[0],
+                            downloads: 0,
+                            status: 'Aktif',
+                            fileData: fileInput ? URL.createObjectURL(fileInput) : null
+                        };
+                        setDb(prev => ({...prev, documents: [...prev.documents, newDoc]}));
+                    } else {
+                        // Ganti PDF
+                        setDb(prev => ({
+                            ...prev, 
+                            documents: prev.documents.map(d => d.id === uploadModal.id ? {
+                                ...d, 
+                                version: (parseFloat(d.version) + 0.1).toFixed(1).toString(),
+                                updateDate: new Date().toISOString().split('T')[0],
+                                fileData: fileInput ? URL.createObjectURL(fileInput) : d.fileData
+                            } : d)
+                        }));
+                    }
+                    setUploadModal(null);
+                    setFileInput(null);
+                };
+
+                return (
+                    <div>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">Manajemen Dokumen & Surat</h2>
+                            <button onClick={() => {setNewDocData({}); setUploadModal({isNew: true});}} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold text-sm shadow">
+                                <i className="fa-solid fa-upload mr-1"></i> Tambah Dokumen
+                            </button>
+                        </div>
+
+                        {uploadModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+                                <div className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full">
+                                    <h3 className="text-xl font-bold mb-4">{uploadModal.isNew ? 'Upload Dokumen Baru' : 'Ganti File PDF'}</h3>
+                                    <form onSubmit={handleSaveDoc} className="space-y-4">
+                                        {uploadModal.isNew && (
+                                            <>
+                                                <div>
+                                                    <label className="block text-sm font-bold mb-1">Nama Dokumen</label>
+                                                    <input type="text" required onChange={e=>setNewDocData({...newDocData, name: e.target.value})} className="w-full border p-2 rounded text-sm"/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-bold mb-1">Terkait Layanan</label>
+                                                    <select required onChange={e=>setNewDocData({...newDocData, serviceId: e.target.value})} className="w-full border p-2 rounded text-sm">
+                                                        <option value="">-- Pilih Layanan --</option>
+                                                        {db.services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.category})</option>)}
+                                                    </select>
+                                                </div>
+                                            </>
+                                        )}
+                                        {!uploadModal.isNew && (
+                                            <p className="text-sm bg-gray-100 p-2 rounded mb-2">Mengganti PDF untuk: <strong>{uploadModal.name}</strong></p>
+                                        )}
+                                        <div>
+                                            <label className="block text-sm font-bold mb-1">File PDF</label>
+                                            <input type="file" accept=".pdf" onChange={e => setFileInput(e.target.files[0])} className="w-full border p-2 rounded text-sm" required />
+                                            <p className="text-xs text-gray-500 mt-1">Hanya file berekstensi .pdf (Simulasi: File disimpan sementara di sesi browser)</p>
+                                        </div>
+                                        <div className="flex space-x-2 pt-2">
+                                            <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded font-bold shadow hover:bg-green-700">Simpan</button>
+                                            <button type="button" onClick={()=>setUploadModal(null)} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded font-bold shadow hover:bg-gray-400">Batal</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-white rounded shadow overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-100 text-gray-700 text-sm">
+                                        <th className="p-3 border-b">Nama Dokumen</th>
+                                        <th className="p-3 border-b">Layanan</th>
+                                        <th className="p-3 border-b">Versi / Update</th>
+                                        <th className="p-3 border-b">Unduhan</th>
+                                        <th className="p-3 border-b text-center">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {db.documents.map(d => (
+                                        <tr key={d.id} className="hover:bg-gray-50 border-b text-sm">
+                                            <td className="p-3 font-medium text-gray-800">{d.name}</td>
+                                            <td className="p-3">{db.services.find(s=>s.id === d.serviceId)?.name || '-'}</td>
+                                            <td className="p-3"><span className="bg-gray-200 px-2 py-1 rounded text-xs font-bold mr-2">v{d.version}</span> {d.updateDate}</td>
+                                            <td className="p-3">{d.downloads}</td>
+                                            <td className="p-3 text-center">
+                                                <button onClick={()=>setUploadModal(d)} className="text-white bg-blue-500 hover:bg-blue-600 px-3 py-1 rounded text-xs font-bold mr-2 shadow-sm"><i className="fa-solid fa-file-pdf"></i> GANTI PDF</button>
+                                                <button onClick={()=>{ if(confirm('Hapus dokumen ini?')) setDb(prev=>({...prev, documents: prev.documents.filter(x=>x.id!==d.id)})) }} className="text-red-500 hover:text-red-700"><i className="fa-solid fa-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
+
+            const AdminFeedback = () => (
+                <div>
+                    <h2 className="text-2xl font-bold mb-6">Feedback Publik</h2>
+                    {db.feedback.length === 0 ? <p className="text-gray-500">Belum ada feedback masuk.</p> : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {db.feedback.map(f => (
+                                <div key={f.id} className="bg-white p-4 rounded shadow border-l-4 border-yellow-500">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="text-yellow-500 text-sm">
+                                            {Array(parseInt(f.rating)).fill(0).map((_,i) => <i key={i} className="fa-solid fa-star"></i>)}
+                                        </div>
+                                        <span className="text-xs text-gray-400">{f.date}</span>
+                                    </div>
+                                    <p className="text-sm font-bold text-gray-700 mb-1">Mencari: {f.service || 'Umum'} (Ditemukan: {f.found})</p>
+                                    <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded italic">"{f.message || 'Tidak ada pesan'}"</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+
+            // --- LAYOUT WRAPPERS ---
+            const renderPublicContent = () => {
+                switch(page) {
+                    case 'home': return <Home />;
+                    case 'search_results': return <SearchResults />;
+                    case 'layanan': return <Layanan />;
+                    case 'service_detail': return <ServiceDetail />;
+                    case 'faq':
+                    case 'feedback':
+                    case 'suggest': return <FAQFeedbackSuggest />;
+                    default: return <Home />;
+                }
+            };
+
+            const renderAdminContent = () => {
+                switch(page) {
+                    case 'admin_dashboard': return <AdminDashboard />;
+                    case 'admin_services': return <AdminServices />;
+                    case 'admin_docs': return <AdminDocuments />;
+                    case 'admin_feedback': return <AdminFeedback />;
+                    case 'admin_announcements': return <div className="p-4 bg-white shadow rounded text-center">Fitur manajemen pengumuman. (Modul Serupa CRUD Layanan)</div>;
+                    default: return <AdminDashboard />;
+                }
+            };
+
+            // MAIN RENDER
+            if (page === 'admin_login') return <AdminLogin />;
+
+            if (page.startsWith('admin_') && adminUser) {
+                return (
+                    <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
+                        <AdminSidebar />
+                        <div className="flex-1 p-8 overflow-y-auto h-screen">
+                            {renderAdminContent()}
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col min-h-screen">
+                    <Navbar />
+                    <main className="flex-grow">
+                        {renderPublicContent()}
+                    </main>
+                    <Footer />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
